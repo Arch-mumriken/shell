@@ -5,6 +5,7 @@ import qs.services
 import qs.config
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 Column {
     id: root
@@ -13,6 +14,71 @@ Column {
     anchors.right: parent.right
     padding: Appearance.padding.large
     spacing: Appearance.spacing.small
+
+    property date currentDate: new Date()
+
+    RowLayout {
+        id: monthNavigationRow
+
+        width: parent.width - (root.padding * 2)
+        spacing: Appearance.spacing.small
+
+        Item {
+            Layout.preferredWidth: 30
+            Layout.preferredHeight: 30
+
+            StyledText {
+                id: previousMonthText
+                anchors.centerIn: parent
+                text: "<"
+                color: previousMonthMouseArea.containsMouse ? Colours.palette.m3onSecondary : Colours.palette.m3secondary
+                font.pointSize: Appearance.font.size.normal
+                font.weight: 700
+            }
+
+            MouseArea {
+                id: previousMonthMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {
+                    root.currentDate = new Date(root.currentDate.getFullYear(), root.currentDate.getMonth() - 1, 1);
+                }
+            }
+        }
+
+        StyledText {
+            id: monthYearDisplay
+
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            text: Qt.formatDateTime(root.currentDate, "MMMM yyyy")
+            font.pointSize: Appearance.font.size.normal
+            font.weight: 500
+        }
+
+        Item {
+            Layout.preferredWidth: 30
+            Layout.preferredHeight: 30
+
+            StyledText {
+                id: nextMonthText
+                anchors.centerIn: parent
+                text: ">"
+                color: nextMonthMouseArea.containsMouse ? Colours.palette.m3onSecondary : Colours.palette.m3secondary
+                font.pointSize: Appearance.font.size.normal
+                font.weight: 700
+            }
+
+            MouseArea {
+                id: nextMonthMouseArea
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {
+                    root.currentDate = new Date(root.currentDate.getFullYear(), root.currentDate.getMonth() + 1, 1);
+                }
+            }
+        }
+    }
 
     DayOfWeekRow {
         id: days
@@ -33,6 +99,9 @@ Column {
 
     MonthGrid {
         id: grid
+
+        month: root.currentDate.getMonth()
+        year: root.currentDate.getFullYear()
 
         anchors.left: parent.left
         anchors.right: parent.right
