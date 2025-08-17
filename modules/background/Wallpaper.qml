@@ -12,7 +12,7 @@ Item {
     id: root
 
     property string source: Wallpapers.current
-    property Image current: one
+    property WallSurface current: one
 
     anchors.fill: parent
 
@@ -95,47 +95,86 @@ Item {
         }
     }
 
-    Img {
+    WallSurface {
         id: one
+        anchors.fill: parent
     }
 
-    Img {
+    WallSurface {
         id: two
+        anchors.fill: parent
     }
 
-    component Img: CachingImage {
-        id: img
-
-        function update(): void {
-            if (path === root.source)
-                root.current = this;
-            else
-                path = root.source;
+    component WallSurface: Item {
+        id: surface
+        property string path: ""
+        property bool isVideo: {
+            if (!path)
+                return false;
+            var p = path.toLowerCase();
+            return p.endsWith(".mp4") || p.endsWith(".webm") || p.endsWith(".mov") || p.endsWith(".mkv") || p.endsWith(".avi");
         }
 
-        anchors.fill: parent
+        CachingImage {
+            id: img
+            anchors.fill: parent
+            visible: !surface.isVideo
+            path: surface.isVideo ? "" : surface.path
+
+            onStatusChanged: {
+                if (status === Image.Ready)
+                    surface._markReady();
+            }
+        }
+
+        Loader {
+            id: videoLoader
+            anchors.fill: parent
+            visible: surface.isVideo
+            active: surface.isVideo && !!surface.path
+            source: "VideoSurface.qml"
+            onLoaded: {
+                item.path = surface.path;
+                item.onReady = function () {
+                    surface._markReady();
+                };
+            }
+            onStatusChanged: {
+                if (status === Loader.Error) {
+                    console.warn("Video load failed, falling back to image");
+                    img.path = surface.path;
+                    surface.isVideo = false;
+                }
+            }
+        }
+
+        function update(): void {
+            if (surface.path === root.source) {
+                root.current = surface;
+            } else {
+                surface.path = root.source;
+            }
+        }
+
+        function _markReady(): void {
+            root.current = surface;
+        }
 
         opacity: 0
         scale: Wallpapers.showPreview ? 1 : 0.8
 
-        onStatusChanged: {
-            if (status === Image.Ready)
-                root.current = this;
-        }
-
         states: State {
             name: "visible"
-            when: root.current === img
-
+            when: root.current === surface
             PropertyChanges {
-                img.opacity: 1
-                img.scale: 1
+                surface.opacity: 1
+                surface.scale: 1
             }
         }
 
         transitions: Transition {
             NumberAnimation {
-                target: img
+                target: surface
                 properties: "opacity,scale"
                 duration: Appearance.anim.durations.normal
                 easing.type: Easing.BezierSpline
