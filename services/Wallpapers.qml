@@ -30,6 +30,9 @@ Searcher {
     }
 
     readonly property string thumbsDir: Paths.strip(`${Paths.state}/wallpaper/thumbs`)
+    function ensureThumbsDir() {
+        Quickshell.execDetached(["mkdir", "-p", thumbsDir]);
+    }
 
     function setWallpaper(path: string): void {
         actualCurrent = path;
@@ -56,21 +59,22 @@ Searcher {
             Colours.showPreview = false;
     }
 
-    function ensureThumbsDir() {
-        Quickshell.execDetached(["mkdir", "-p", thumbsDir]);
-    }
+    reloadableId: "wallpapers"
+
+    list: wallpapers.instances
+    useFuzzy: Config.launcher.useFuzzy.wallpapers
+    extraOpts: useFuzzy ? ({}) : ({
+            forward: false
+        })
 
     IpcHandler {
         target: "wallpaper"
-
         function get(): string {
             return root.actualCurrent;
         }
-
         function set(path: string): void {
             root.setWallpaper(path);
         }
-
         function list(): string {
             return root.list.map(w => w.path).join("\n");
         }
@@ -113,7 +117,7 @@ Searcher {
         id: videoThumbber
 
         function _hash(s) {
-            var h = 2166136261; // simple FNV-1a-ish
+            var h = 2166136261;
             for (var i = 0; i < s.length; ++i) {
                 h ^= s.charCodeAt(i);
                 h = (h * 16777619) >>> 0;
@@ -122,7 +126,7 @@ Searcher {
         }
 
         function request(videoPath) {
-            var comp = Qt.createComponent("VideoThumbGrabber.qml");
+            var comp = Qt.createComponent(Qt.resolvedUrl("../components/wallpapers/VideoThumbGrabber.qml"));
             if (comp.status === Component.Error) {
                 console.warn("VideoThumbGrabber component error:", comp.errorString());
                 return;
@@ -149,32 +153,20 @@ Searcher {
         }
     }
 
-    Variants {
-        id: wallpapers
-        Wallpaper {}
-    }
-
-    list: wallpapers.instances
-    useFuzzy: Config.launcher.useFuzzy.wallpapers
-    extraOpts: useFuzzy ? ({}) : ({
-            forward: false
-        })
-
     Process {
         id: getWallsProc
-
         running: true
         command: ["find", "-L", Paths.expandTilde(Config.paths.wallpaperDir), "-type", "d", "-path", '*/.*', "-prune", "-o", "-not", "-name", '.*', "-type", "f", "-print"]
         stdout: StdioCollector {
             onStreamFinished: {
-                wallpapers.model = text.trim().split("\n").filter(w => root.isMediaByName(w)).sort();
+                const files = text.trim().split("\n").filter(w => root.isMediaByName(w)).sort();
+                wallpapers.model = files;
             }
         }
     }
 
     Process {
         id: watchWallsProc
-
         running: true
         command: ["inotifywait", "-r", "-e", "close_write,moved_to,create", "-m", Paths.expandTilde(Config.paths.wallpaperDir)]
         stdout: SplitParser {
@@ -187,12 +179,16 @@ Searcher {
 
     Connections {
         target: Config.paths
-
         function onWallpaperDirChanged(): void {
             getWallsProc.running = true;
             watchWallsProc.running = false;
             watchWallsProc.running = true;
         }
+    }
+
+    Variants {
+        id: wallpapers
+        Wallpaper {}
     }
 
     component Wallpaper: QtObject {
