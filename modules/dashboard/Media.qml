@@ -7,6 +7,7 @@ import qs.components.controls
 import qs.services
 import qs.utils
 import qs.config
+import Caelestia
 import Quickshell
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
@@ -56,6 +57,10 @@ Item {
 
     Ref {
         service: Cava
+    }
+
+    Ref {
+        service: BeatTracker
     }
 
     Shape {
@@ -283,11 +288,34 @@ Item {
             implicitWidth: controls.implicitWidth * 1.5
             implicitHeight: Appearance.padding.normal * 3
 
-            value: root.playerProgress
             onMoved: {
                 const active = Players.active;
                 if (active?.canSeek && active?.positionSupported)
                     active.position = value * active.length;
+            }
+
+            Binding {
+                target: slider
+                property: "value"
+                value: root.playerProgress
+                when: !slider.pressed
+            }
+
+            CustomMouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+
+                function onWheel(event: WheelEvent) {
+                    const active = Players.active;
+                    if (!active?.canSeek || !active?.positionSupported)
+                        return;
+
+                    event.accepted = true;
+                    const delta = event.angleDelta.y > 0 ? 10 : -10;    // Time 10 seconds
+                    Qt.callLater(() => {
+                        active.position = Math.max(0, Math.min(active.length, active.position + delta));
+                    });
+                }
             }
         }
 
@@ -502,8 +530,8 @@ Item {
             height: visualiser.height * 0.75
 
             playing: Players.active?.isPlaying ?? false
-            speed: BeatDetector.bpm / 300
-            source: Paths.expandTilde(Config.paths.mediaGif)
+            speed: BeatTracker.bpm / 300
+            source: Paths.absolutePath(Config.paths.mediaGif)
             asynchronous: true
             fillMode: AnimatedImage.PreserveAspectFit
         }

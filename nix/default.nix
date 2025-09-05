@@ -14,25 +14,20 @@
   swappy,
   wl-clipboard,
   libqalculate,
-  inotify-tools,
-  bluez,
   bash,
   hyprland,
-  coreutils,
-  findutils,
-  file,
   material-symbols,
   rubik,
   nerd-fonts,
   qt6,
   quickshell,
   aubio,
-  pipewire,
   xkeyboard-config,
   cmake,
   ninja,
   pkg-config,
   caelestia-cli,
+  debug ? false,
   withCli ? false,
   extraRuntimeDeps ? [],
 }: let
@@ -50,13 +45,8 @@
       swappy
       wl-clipboard
       libqalculate
-      inotify-tools
-      bluez
       bash
       hyprland
-      coreutils
-      findutils
-      file
     ]
     ++ extraRuntimeDeps
     ++ lib.optional withCli caelestia-cli;
@@ -71,33 +61,32 @@
     (lib.cmakeFeature "DISTRIBUTOR" "nix-flake")
   ];
 
-  assets = stdenv.mkDerivation {
-    name = "caelestia-assets";
+  extras = stdenv.mkDerivation {
+    name = "caelestia-extras${lib.optionalString debug "-debug"}";
     src = lib.fileset.toSource {
       root = ./..;
-      fileset = lib.fileset.union ./../CMakeLists.txt ./../assets/cpp;
+      fileset = lib.fileset.union ./../CMakeLists.txt ./../extras;
     };
 
-    nativeBuildInputs = [cmake ninja pkg-config];
-    buildInputs = [aubio pipewire];
+    nativeBuildInputs = [cmake ninja];
 
     cmakeFlags =
       [
-        (lib.cmakeFeature "ENABLE_MODULES" "assets")
+        (lib.cmakeFeature "ENABLE_MODULES" "extras")
         (lib.cmakeFeature "INSTALL_LIBDIR" "${placeholder "out"}/lib")
       ]
       ++ cmakeVersionFlags;
   };
 
   plugin = stdenv.mkDerivation {
-    name = "caelestia-qml-plugin";
+    name = "caelestia-qml-plugin${lib.optionalString debug "-debug"}";
     src = lib.fileset.toSource {
       root = ./..;
       fileset = lib.fileset.union ./../CMakeLists.txt ./../plugin;
     };
 
-    nativeBuildInputs = [cmake ninja];
-    buildInputs = [qt6.qtbase qt6.qtdeclarative];
+    nativeBuildInputs = [cmake ninja pkg-config];
+    buildInputs = [qt6.qtbase qt6.qtdeclarative qt6.qtmultimedia libqalculate aubio];
 
     dontWrapQtApps = true;
     cmakeFlags =
@@ -110,14 +99,17 @@
 in
   stdenv.mkDerivation {
     inherit version;
-    pname = "caelestia-shell";
+    pname = "caelestia-shell${lib.optionalString debug "-debug"}";
     src = ./..;
 
     nativeBuildInputs = [cmake ninja makeWrapper qt6.wrapQtAppsHook];
-    buildInputs = [quickshell assets plugin xkeyboard-config qt6.qtbase];
+    buildInputs = [quickshell extras plugin xkeyboard-config qt6.qtbase];
     propagatedBuildInputs = runtimeDeps;
 
-    cmakeBuildType = "Release";
+    cmakeBuildType =
+      if debug
+      then "Debug"
+      else "RelWithDebInfo";
     cmakeFlags =
       [
         (lib.cmakeFeature "ENABLE_MODULES" "shell")
@@ -125,25 +117,29 @@ in
       ]
       ++ cmakeVersionFlags;
 
+    dontStrip = debug;
+
     prePatch = ''
       substituteInPlace assets/pam.d/fprint \
         --replace-fail pam_fprintd.so /run/current-system/sw/lib/security/pam_fprintd.so
+      substituteInPlace shell.qml \
+        --replace-fail 'ShellRoot {' 'ShellRoot {  settings.watchFiles: false'
     '';
 
     postInstall = ''
       makeWrapper ${quickshell}/bin/qs $out/bin/caelestia-shell \
       	--prefix PATH : "${lib.makeBinPath runtimeDeps}" \
       	--set FONTCONFIG_FILE "${fontconfig}" \
-      	--set CAELESTIA_LIB_DIR ${assets}/lib \
+      	--set CAELESTIA_LIB_DIR ${extras}/lib \
         --set CAELESTIA_XKB_RULES_PATH ${xkeyboard-config}/share/xkeyboard-config-2/rules/base.lst \
       	--add-flags "-p $out/share/caelestia-shell"
 
       mkdir -p $out/lib
-      ln -s ${assets}/lib/* $out/lib/
+      ln -s ${extras}/lib/* $out/lib/
     '';
 
     passthru = {
-      inherit plugin assets;
+      inherit plugin extras;
     };
 
     meta = {
